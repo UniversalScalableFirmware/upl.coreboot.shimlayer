@@ -22,6 +22,7 @@ After building coreboot, you can use coreboot tool ```cbfstool``` to replace Shi
 Copy ```ShimLayer.elf``` and the target ```UniversalPayload.elf``` to ```<coreboot_workspace>/build```.  
 Use the below command  
 ```
+cd <coreboot_workspace>/build
 ./cbfstool coreboot.rom remove -r COREBOOT -n fallback/payload
 ./cbfstool coreboot.rom add-payload -r COREBOOT -n fallback/payload -f ShimLayer.elf
 ./cbfstool coreboot.rom remove -r COREBOOT -n img/UniversalPayload
