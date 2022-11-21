@@ -493,7 +493,7 @@ ParseSerialInfo (
 /**
   Find the video frame buffer information
 
-  @param  GfxInfo             Pointer to the PEI_GRAPHICS_INFO_HOB structure
+  @param  GfxInfo             Pointer to the EFI_PEI_GRAPHICS_INFO_HOB structure
 
   @retval RETURN_SUCCESS     Successfully find the video frame buffer information.
   @retval RETURN_NOT_FOUND   Failed to find the video frame buffer information .
@@ -501,11 +501,11 @@ ParseSerialInfo (
 **/
 RETURN_STATUS
 ParseGfxInfo (
-  OUT PEI_GRAPHICS_INFO_HOB  *GfxInfo
+  OUT EFI_PEI_GRAPHICS_INFO_HOB  *GfxInfo
   )
 {
   struct cb_framebuffer             *CbFbRec;
-  GRAPHICS_OUTPUT_MODE_INFORMATION  *GfxMode;
+  EFI_GRAPHICS_OUTPUT_MODE_INFORMATION  *GfxMode;
 
   if (GfxInfo == NULL) {
     return RETURN_INVALID_PARAMETER;
@@ -541,7 +541,7 @@ ParseGfxInfo (
 /**
   Find the video frame buffer device information
 
-  @param  GfxDeviceInfo      Pointer to the PEI_GRAPHICS_DEVICE_INFO_HOB structure
+  @param  GfxDeviceInfo      Pointer to the EFI_PEI_GRAPHICS_DEVICE_INFO_HOB structure
 
   @retval RETURN_SUCCESS     Successfully find the video frame buffer information.
   @retval RETURN_NOT_FOUND   Failed to find the video frame buffer information.
@@ -549,7 +549,7 @@ ParseGfxInfo (
 **/
 RETURN_STATUS
 ParseGfxDeviceInfo (
-  OUT PEI_GRAPHICS_DEVICE_INFO_HOB  *GfxDeviceInfo
+  OUT EFI_PEI_GRAPHICS_DEVICE_INFO_HOB  *GfxDeviceInfo
   )
 {
   return RETURN_NOT_FOUND;

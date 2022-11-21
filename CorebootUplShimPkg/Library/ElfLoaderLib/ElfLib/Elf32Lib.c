@@ -110,7 +110,7 @@ ProcessRelocation32 (
   IN  UINT32      RelaSize,
   IN  UINT32      RelaEntrySize,
   IN  UINT32      RelaType,
-  IN  intn        Delta,
+  IN  INTN        Delta,
   IN  BOOLEAN     DynamicLinking
   )
 {

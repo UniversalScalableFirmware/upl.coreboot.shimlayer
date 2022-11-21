@@ -6,8 +6,10 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
 
 #include "ShimLayer.h"
+#include "FdtTable.h"
 
-STATIC UINT32  mTopOfLowerUsableDram = 0;
+STATIC UINT32   mTopOfLowerUsableDram = 0;
+STATIC MEM_POOL mShimLayerMemory = {0};
 
 GUID gGraphicsInfoHobGuid                   = { 0x39f62cce, 0x6825, 0x4669, { 0xbb, 0x56, 0x54, 0x1a, 0xba, 0x75, 0x3a, 0x07 }};
 GUID gGraphicsDeviceInfoHobGuid             = { 0xe5cb2ac9, 0xd35d, 0x4430, { 0x93, 0x6e, 0x1d, 0xe3, 0x32, 0x47, 0x8d, 0xe7 }};
@@ -33,34 +35,29 @@ AllocatePages (
   IN UINTN  Pages
   )
 {
-  HOB_POINTERS            Hob;
-  ADDRESS                 Offset;
-  HOB_HANDOFF_INFO_TABLE  *HobTable;
-
-  Hob.Raw  = GetHobList ();
-  HobTable = Hob.HandoffInformationTable;
+  ADDRESS    Offset;
 
   if (Pages == 0) {
     return NULL;
   }
 
   // Make sure allocation address is page alligned.
-  Offset = HobTable->FreeMemoryTop & PAGE_MASK;
+  Offset = mShimLayerMemory.FreeMemoryTop & PAGE_MASK;
   if (Offset != 0) {
-    HobTable->FreeMemoryTop -= Offset;
+    mShimLayerMemory.FreeMemoryTop -= Offset;
   }
 
   //
   // Check available memory for the allocation
   //
-  if (HobTable->FreeMemoryTop - ((Pages * PAGE_SIZE) + sizeof (HOB_MEMORY_ALLOCATION)) < HobTable->FreeMemoryBottom) {
+  if (mShimLayerMemory.FreeMemoryTop - (Pages * PAGE_SIZE) < mShimLayerMemory.FreeMemoryBottom) {
     return NULL;
   }
 
-  HobTable->FreeMemoryTop -= Pages * PAGE_SIZE;
-  BuildMemoryAllocationHob (HobTable->FreeMemoryTop, Pages * PAGE_SIZE, BootServicesData);
+  mShimLayerMemory.FreeMemoryTop -= Pages * PAGE_SIZE;
+  BuildMemAllocFdtNode (mShimLayerMemory.FreeMemoryTop, Pages * PAGE_SIZE, BootServicesData);
 
-  return (VOID *)(UINTN)HobTable->FreeMemoryTop;
+  return (VOID *)(UINTN)mShimLayerMemory.FreeMemoryTop;
 }
 
 /**
@@ -220,10 +217,10 @@ MemInfoCallback (
   IN VOID              *Params
   )
 {
-  ADDRESS                  Base;
-  RESOURCE_TYPE            Type;
-  UINT64                   Size;
-  RESOURCE_ATTRIBUTE_TYPE  Attribue;
+  RESOURCE_TYPE            ResourceType;
+  RESOURCE_ATTRIBUTE_TYPE  ResourceAttribute;
+  ADDRESS                  PhysicalStart;
+  UINT64                   NumberOfBytes;
 
   //
   // Skip everything not known to be usable DRAM.
@@ -235,24 +232,23 @@ MemInfoCallback (
     return RETURN_SUCCESS;
   }
 
-  Type = RESOURCE_SYSTEM_MEMORY;
-  Base = MemoryMapEntry->Base;
-  Size = MemoryMapEntry->Size;
+  ResourceType = RESOURCE_SYSTEM_MEMORY;
+  PhysicalStart = (ADDRESS)MemoryMapEntry->Base;
+  NumberOfBytes = MemoryMapEntry->Size;
+  ResourceAttribute = RESOURCE_ATTRIBUTE_PRESENT |
+                      RESOURCE_ATTRIBUTE_INITIALIZED |
+                      RESOURCE_ATTRIBUTE_TESTED |
+                      RESOURCE_ATTRIBUTE_UNCACHEABLE |
+                      RESOURCE_ATTRIBUTE_WRITE_COMBINEABLE |
+                      RESOURCE_ATTRIBUTE_WRITE_THROUGH_CACHEABLE |
+                      RESOURCE_ATTRIBUTE_WRITE_BACK_CACHEABLE;
 
-  Attribue = RESOURCE_ATTRIBUTE_PRESENT |
-             RESOURCE_ATTRIBUTE_INITIALIZED |
-             RESOURCE_ATTRIBUTE_TESTED |
-             RESOURCE_ATTRIBUTE_UNCACHEABLE |
-             RESOURCE_ATTRIBUTE_WRITE_COMBINEABLE |
-             RESOURCE_ATTRIBUTE_WRITE_THROUGH_CACHEABLE |
-             RESOURCE_ATTRIBUTE_WRITE_BACK_CACHEABLE;
-
-  BuildResourceDescriptorHob (Type, Attribue, (ADDRESS)Base, Size);
+  BuildMemInfoFdt (PhysicalStart, NumberOfBytes, ResourceAttribute);
 
   if (MemoryMapEntry->Type == E820_ACPI) {
-    BuildMemoryAllocationHob (Base, Size, ACPIReclaimMemory);
+    BuildMemAllocFdtNode (PhysicalStart, NumberOfBytes, ACPIReclaimMemory);
   } else if (MemoryMapEntry->Type == E820_NVS) {
-    BuildMemoryAllocationHob (Base, Size, ACPIMemoryNVS);
+    BuildMemAllocFdtNode (PhysicalStart, NumberOfBytes, ACPIMemoryNVS);
   }
 
   return RETURN_SUCCESS;
@@ -277,10 +273,10 @@ MemInfoCallbackMmio (
   IN VOID              *Params
   )
 {
-  ADDRESS                  Base;
-  RESOURCE_TYPE            Type;
-  UINT64                   Size;
-  RESOURCE_ATTRIBUTE_TYPE  Attribue;
+  RESOURCE_TYPE            ResourceType;
+  RESOURCE_ATTRIBUTE_TYPE  ResourceAttribute;
+  ADDRESS         PhysicalStart;
+  UINT64                       NumberOfBytes;
 
   //
   // Skip types already handled in MemInfoCallback
@@ -293,66 +289,51 @@ MemInfoCallbackMmio (
     //
     // It's in DRAM and thus must be reserved
     //
-    Type = RESOURCE_MEMORY_RESERVED;
+    ResourceType = RESOURCE_MEMORY_RESERVED;
   } else if ((MemoryMapEntry->Base < 0x100000000ULL) && (MemoryMapEntry->Base >= mTopOfLowerUsableDram)) {
     //
     // It's not in DRAM, must be MMIO
     //
-    Type = RESOURCE_MEMORY_MAPPED_IO;
+    ResourceType = RESOURCE_MEMORY_MAPPED_IO;
   } else {
-    Type = RESOURCE_MEMORY_RESERVED;
+    ResourceType = RESOURCE_MEMORY_RESERVED;
   }
 
-  Base = MemoryMapEntry->Base;
-  Size = MemoryMapEntry->Size;
+  PhysicalStart = MemoryMapEntry->Base;
+  NumberOfBytes = MemoryMapEntry->Size;
+  ResourceAttribute = RESOURCE_ATTRIBUTE_PRESENT |
+                      RESOURCE_ATTRIBUTE_INITIALIZED |
+                      RESOURCE_ATTRIBUTE_TESTED |
+                      RESOURCE_ATTRIBUTE_UNCACHEABLE |
+                      RESOURCE_ATTRIBUTE_WRITE_COMBINEABLE |
+                      RESOURCE_ATTRIBUTE_WRITE_THROUGH_CACHEABLE |
+                      RESOURCE_ATTRIBUTE_WRITE_BACK_CACHEABLE;
 
-  Attribue = RESOURCE_ATTRIBUTE_PRESENT |
-             RESOURCE_ATTRIBUTE_INITIALIZED |
-             RESOURCE_ATTRIBUTE_TESTED |
-             RESOURCE_ATTRIBUTE_UNCACHEABLE |
-             RESOURCE_ATTRIBUTE_WRITE_COMBINEABLE |
-             RESOURCE_ATTRIBUTE_WRITE_THROUGH_CACHEABLE |
-             RESOURCE_ATTRIBUTE_WRITE_BACK_CACHEABLE;
-
-  BuildResourceDescriptorHob (Type, Attribue, (ADDRESS)Base, Size);
+  BuildReservedMemFdt (PhysicalStart, NumberOfBytes, ResourceType, ResourceAttribute);
 
   if ((MemoryMapEntry->Type == E820_UNUSABLE) ||
       (MemoryMapEntry->Type == E820_DISABLED))
   {
-    BuildMemoryAllocationHob (Base, Size, UnusableMemory);
+    BuildMemAllocFdtNode (PhysicalStart, NumberOfBytes, UnusableMemory);
   } else if (MemoryMapEntry->Type == E820_PMEM) {
-    BuildMemoryAllocationHob (Base, Size, PersistentMemory);
+    BuildMemAllocFdtNode (PhysicalStart, NumberOfBytes, PersistentMemory);
   }
 
   return SUCCESS;
 }
 
 /**
-  It will build HOBs based on information from bootloaders.
-
+  It will build FDT based on memory information from Fdt.
+  @param[in] FdtBase         Address of the Fdt data.
   @retval SUCCESS        If it completed successfully.
-  @retval Others             If it failed to build required HOBs.
+  @retval Others             If it failed to build required FDT.
 **/
 RETURN_STATUS
-BuildHobFromBl (
+BuildFdtForMemory (
   VOID
   )
 {
-  RETURN_STATUS                       Status;
-  PEI_GRAPHICS_INFO_HOB               GfxInfo;
-  PEI_GRAPHICS_INFO_HOB               *NewGfxInfo;
-  PEI_GRAPHICS_DEVICE_INFO_HOB        GfxDeviceInfo;
-  PEI_GRAPHICS_DEVICE_INFO_HOB        *NewGfxDeviceInfo;
-  UNIVERSAL_PAYLOAD_SMBIOS_TABLE      *SmBiosTableHob;
-  UNIVERSAL_PAYLOAD_ACPI_TABLE        *AcpiTableHob;
-
-  //
-  // First find TOLUD
-  //
-  Status = ParseMemoryInfo (FindToludCallback, NULL);
-  if (ERROR (Status)) {
-    return Status;
-  }
+  RETURN_STATUS Status;
 
   //
   // Parse memory info and build memory HOBs for Usable RAM
@@ -362,36 +343,26 @@ BuildHobFromBl (
     return Status;
   }
 
-  //
-  // Create guid hob for frame buffer information
-  //
-  Status = ParseGfxInfo (&GfxInfo);
-  if (!ERROR (Status)) {
-    NewGfxInfo = BuildGuidHob (&gGraphicsInfoHobGuid, sizeof (GfxInfo));
-    CopyMem (NewGfxInfo, &GfxInfo, sizeof (GfxInfo));
-  }
+  return SUCCESS;
+}
 
-  Status = ParseGfxDeviceInfo (&GfxDeviceInfo);
-  if (!ERROR (Status)) {
-    NewGfxDeviceInfo = BuildGuidHob (&gGraphicsDeviceInfoHobGuid, sizeof (GfxDeviceInfo));
-    CopyMem (NewGfxDeviceInfo, &GfxDeviceInfo, sizeof (GfxDeviceInfo));
-  }
+/**
+  It will build FDT based on MMIO information from Cbmem.
+  Add free memory region to here.
 
-  //
-  // Creat SmBios table Hob
-  //
-  SmBiosTableHob = BuildGuidHob (&gUniversalPayloadSmbiosTableGuid, sizeof (UNIVERSAL_PAYLOAD_SMBIOS_TABLE));
-  SmBiosTableHob->Header.Revision = UNIVERSAL_PAYLOAD_SMBIOS_TABLE_REVISION;
-  SmBiosTableHob->Header.Length   = sizeof (UNIVERSAL_PAYLOAD_SMBIOS_TABLE);
-  Status = ParseSmbiosTable (SmBiosTableHob);
+  @param[in] FdtBase         Address of the Fdt data.
+  @retval SUCCESS        If it completed successfully.
+  @retval Others             If it failed to build required FDT.
+**/
+RETURN_STATUS
+BuildFdtForReservedMemory (
+  VOID
+  )
+{
+  RETURN_STATUS                   Status;
+  RESOURCE_ATTRIBUTE_TYPE  Attribue;
 
-  //
-  // Creat ACPI table Hob
-  //
-  AcpiTableHob = BuildGuidHob (&gUniversalPayloadAcpiTableGuid, sizeof (UNIVERSAL_PAYLOAD_ACPI_TABLE));
-  AcpiTableHob->Header.Revision = UNIVERSAL_PAYLOAD_ACPI_TABLE_REVISION;
-  AcpiTableHob->Header.Length   = sizeof (UNIVERSAL_PAYLOAD_ACPI_TABLE);
-  Status = ParseAcpiTableInfo (AcpiTableHob);
+  CreateReservedMemFdt ();
 
   //
   // Parse memory info and build memory HOBs for reserved DRAM and MMIO
@@ -401,87 +372,135 @@ BuildHobFromBl (
     return Status;
   }
 
+  //
+  // Report Local APIC range, cause sbl HOB to be NULL, comment now
+  //
+  Attribue = (
+              RESOURCE_ATTRIBUTE_PRESENT |
+              RESOURCE_ATTRIBUTE_INITIALIZED |
+              RESOURCE_ATTRIBUTE_UNCACHEABLE |
+              RESOURCE_ATTRIBUTE_TESTED
+              );
+
+  BuildReservedMemFdt (0xFEC80000, SIZE_512KB, RESOURCE_MEMORY_MAPPED_IO, Attribue);
+  BuildMemAllocFdtNode (0xFEC80000, SIZE_512KB, MemoryMappedIO);
+  BuildReservedMemUefi (mShimLayerMemory.FreeMemoryBottom, mShimLayerMemory.FreeMemoryTop);
+
   return SUCCESS;
 }
 
 /**
-  This function will build some generic HOBs that doesn't depend on information from bootloaders.
-
+  It will build FDT based on memory allocation information from Fdt.
+  @retval SUCCESS        If it completed successfully.
+  @retval Others             If it failed to build required FDT.
 **/
-VOID
-BuildGenericHob (
+RETURN_STATUS
+BuildFdtForMemAlloc (
   VOID
   )
 {
-  UINT32                   RegEax;
-  UINT8                    PhysicalAddressBits;
-  RESOURCE_ATTRIBUTE_TYPE  ResourceAttribute;
+  BuildFdtMemAlloc ();
 
-  //Memory allocaion hob for the Shim Layer
-  // BuildMemoryAllocationHob (PcdGet32 (PcdPayloadFdMemBase), PcdGet32 (PcdPayloadFdMemSize), BootServicesData);
-  BuildMemoryAllocationHob (MEMBASE, MEMSIZE, BootServicesData);
-
-  //
-  // Build CPU memory space and IO space hob
-  //
-  AsmCpuid (0x80000000, &RegEax, NULL, NULL, NULL);
-  if (RegEax >= 0x80000008) {
-    AsmCpuid (0x80000008, &RegEax, NULL, NULL, NULL);
-    PhysicalAddressBits = (UINT8)RegEax;
-  } else {
-    PhysicalAddressBits = 36;
-  }
-
-  ShBuildCpuHob (PhysicalAddressBits, 16);
-
-  //
-  // Report Local APIC range, cause sbl HOB to be NULL, comment now
-  //
-  ResourceAttribute = (
-                       RESOURCE_ATTRIBUTE_PRESENT |
-                       RESOURCE_ATTRIBUTE_INITIALIZED |
-                       RESOURCE_ATTRIBUTE_UNCACHEABLE |
-                       RESOURCE_ATTRIBUTE_TESTED
-                       );
-  BuildResourceDescriptorHob (RESOURCE_MEMORY_MAPPED_IO, ResourceAttribute, 0xFEC80000, SIZE_512KB);
-  BuildMemoryAllocationHob (0xFEC80000, SIZE_512KB, MemoryMappedIO);
+  return SUCCESS;
 }
 
+/**
+  It will build FDT based on information from Hobs.
+
+  @retval SUCCESS        If it completed successfully.
+  @retval Others             If it failed to build required FDT.
+**/
 RETURN_STATUS
-ConvertCbmemToHob (
+BuildFdtMemory (
   VOID
   )
 {
-  UINTN                               MemBase;
-  UINTN                               HobMemBase;
-  UINTN                               HobMemTop;
-  RETURN_STATUS                       Status;
-  SERIAL_PORT_INFO                    SerialPortInfo;
-  UNIVERSAL_PAYLOAD_SERIAL_PORT_INFO  *UniversalSerialPort;
+  RETURN_STATUS                          Status;
 
-  MemBase    = MEMBASE;
-  HobMemBase = ALIGN_VALUE (MemBase + MEMSIZE, SIZE_1MB);
-  HobMemTop  = HobMemBase + UEFI_REGION_SIZE;
-  HobConstructor ((VOID *)MemBase, (VOID *)HobMemTop, (VOID *)HobMemBase, (VOID *)HobMemTop);
-
-  Status = ParseSerialInfo (&SerialPortInfo);
-  if (!ERROR (Status)) {
-    UniversalSerialPort = BuildGuidHob (&gUniversalPayloadSerialPortInfoGuid, sizeof (UNIVERSAL_PAYLOAD_SERIAL_PORT_INFO));
-    UniversalSerialPort->Header.Revision = UNIVERSAL_PAYLOAD_SERIAL_PORT_INFO_REVISION;
-    UniversalSerialPort->Header.Length   = sizeof (UNIVERSAL_PAYLOAD_SERIAL_PORT_INFO);
-    UniversalSerialPort->UseMmio         = (SerialPortInfo.Type == 1) ? FALSE : TRUE;
-    UniversalSerialPort->RegisterBase    = SerialPortInfo.BaseAddr;
-    UniversalSerialPort->BaudRate        = SerialPortInfo.Baud;
-    UniversalSerialPort->RegisterStride  = (UINT8)SerialPortInfo.RegWidth;
-  }
-
-  // ProcessLibraryConstructorList ();
-  Status = BuildHobFromBl ();
+  //
+  // First find TOLUD
+  //
+  Status = ParseMemoryInfo (FindToludCallback, NULL);
   if (ERROR (Status)) {
     return Status;
   }
 
-  BuildGenericHob ();
+  Status = BuildFdtForMemory ();
+  if (ERROR (Status)) {
+    return Status;
+  }
+
+  Status = BuildFdtForReservedMemory ();
+  if (ERROR (Status)) {
+    return Status;
+  }
+
+  Status = BuildFdtForMemAlloc ();
+  if (ERROR (Status)) {
+    return Status;
+  }
+
+  return Status;
+}
+
+/**
+  Initialize memory pool by definition.
+
+  @retval SUCCESS        If it completed successfully.
+  @retval Others         If it failed to set memory.
+**/
+RETURN_STATUS
+InitShimMem () {
+  UINTN    MemBase;
+  UINTN    HobMemBase;
+  UINTN    HobMemTop;
+
+  //
+  // MEMBASE, MEMSIZE and UEFI_REGION_SIZE define in GNUmakefile.
+  //
+  MemBase    = MEMBASE;
+  HobMemBase = ALIGN_VALUE (MemBase + MEMSIZE, SIZE_1MB);
+  HobMemTop  = HobMemBase + UEFI_REGION_SIZE;
+
+  mShimLayerMemory.MemoryBottom     = MemBase;
+  mShimLayerMemory.MemoryTop        = HobMemTop;
+  mShimLayerMemory.FreeMemoryBottom = HobMemBase;
+  mShimLayerMemory.FreeMemoryTop    = HobMemTop;
+
+  return SUCCESS;
+}
+
+RETURN_STATUS
+ConvertCbmemToFdt (
+  VOID
+  )
+{
+  RETURN_STATUS                          Status;
+
+  FdtTableInit ();
+
+  Status = BuildFdtForUPL ();
+  if (ERROR (Status)) {
+    return Status;
+  }
+
+  Status = BuildFdtMemory ();
+  if (ERROR (Status)) {
+    return Status;
+  }
+
+  return SUCCESS;
+}
+
+RETURN_STATUS
+HandOffToPayload (
+  IN     ADDRESS    UniversalPayloadEntry,
+  IN     VOID       *FdtTable
+  )
+{
+  typedef VOID (*PayloadEntry) (UINTN);
+  ((PayloadEntry) (UINTN) UniversalPayloadEntry) ((UINTN)FdtTable);
+
   return SUCCESS;
 }
 
@@ -490,21 +509,21 @@ LocateAndDecompressPayload (
   OUT VOID **Dest
   )
 {
-  RETURN_STATUS               Status;
-  ADDRESS                     SourceAddress;
-  UINT64                      ImageSize;
-  ADDRESS                     CBFSAddress;
-  VOID                        *FMapEntry;
-  UINT32                      FMapEntrySize;
-  struct fmap_area            *FMapArea;
-  struct cbfs_payload_segment *FirstSegment;
-  UINT32                      Index;
-  UINTN                       DestSize, ScratchSize;
-  VOID                        *MyDestAddress, *ScratchAddress;
-  UINT32                      Alignment;
-  UINTN                       CBFSEntrySize;
-  union cbfs_mdata            *CBFSEntry;
-  UINT64                      CBFSEntryAddrEnd;
+  RETURN_STATUS                Status;
+  ADDRESS                      SourceAddress;
+  ADDRESS                      CBFSAddress;
+  UINT64                       ImageSize;
+  UINT64                       CBFSEntryAddrEnd;
+  UINT32                       FMapEntrySize;
+  UINT32                       Index;
+  UINT32                       Alignment;
+  UINTN                        DestSize, ScratchSize;
+  UINTN                        CBFSEntrySize;
+  VOID                         *FMapEntry;
+  VOID                         *MyDestAddress, *ScratchAddress;
+  struct fmap_area             *FMapArea;
+  struct cbfs_payload_segment  *FirstSegment;
+  union cbfs_mdata             *CBFSEntry;
 
   SourceAddress     = 0;
   CBFSAddress       = 0;
@@ -618,10 +637,7 @@ LoadPayload (
   // Report the additional PLD sections through HOB.
   //
   Length    = sizeof (UNIVERSAL_PAYLOAD_EXTRA_DATA) + ExtraDataCount * sizeof (UNIVERSAL_PAYLOAD_EXTRA_DATA_ENTRY);
-  ExtraData = BuildGuidHob (
-                &gUniversalPayloadExtraDataGuid,
-                Length
-                );
+  ExtraData = AllocatePages (SIZE_TO_PAGES (Length));
   ExtraData->Count           = ExtraDataCount;
   ExtraData->Header.Revision = UNIVERSAL_PAYLOAD_EXTRA_DATA_REVISION;
   ExtraData->Header.Length   = (UINT16)Length;
@@ -652,6 +668,9 @@ LoadPayload (
   } else {
     Context.ImageAddress = Context.FileBase;
   }
+
+  SetFdtUplExtraData ((ADDRESS)ExtraData);
+
   //
   // Load ELF into the required base
   //
@@ -664,20 +683,6 @@ LoadPayload (
   return Status;
 }
 
-RETURN_STATUS
-HandOffToPayload (
-  IN  ADDRESS       UniversalPayloadEntry,
-  IN  HOB_POINTERS  Hob
-  )
-{
-  UINTN       HobList;
-
-  HobList = (UINTN)(VOID *)Hob.Raw;
-  typedef VOID ( *PayloadEntry) (UINTN);
-  ((PayloadEntry) (UINTN) UniversalPayloadEntry) (HobList);
-
-  return SUCCESS;
-}
 
 /**
 
@@ -694,21 +699,37 @@ _ModuleEntryPoint (
   )
 {
   RETURN_STATUS   Status;
-  HOB_POINTERS    Hob;
   ADDRESS         ImageAddress;
   UINT64          ImageSize;
   ADDRESS         UniversalPayloadEntry;
+  VOID            *FdtBase;
 
+  //
+  // Set coreboot memory base address.
+  //
   SetBootloaderParameter (BootloaderParameter);
-  Status = ConvertCbmemToHob();
-  if (ERROR (Status)) {
-    return Status;
-  }
 
+  //
+  // Initialize local memory pool.
+  //
+  InitShimMem ();
+
+  //
+  // Load ELF into the required base
+  //
   Status = LoadPayload (&ImageAddress, &ImageSize, &UniversalPayloadEntry);
-  BuildMemoryAllocationHob (ImageAddress, ImageSize, BootServicesData);
-  Hob.HandoffInformationTable = (HOB_HANDOFF_INFO_TABLE *)GetFirstHob (HOB_TYPE_HANDOFF);
-  HandOffToPayload (UniversalPayloadEntry, Hob);
+
+  //
+  // Covert coreboot memory information and general information to FDT.
+  // Due to passing the correct free memory region, do not AllocatePages() after this function.
+  //
+  ConvertCbmemToFdt ();
+
+  //
+  // Jump to Universal Payload Entry and pass FDT base address.
+  //
+  FdtBase = GetFdtTable ();
+  HandOffToPayload (UniversalPayloadEntry, FdtBase);
 
   return SUCCESS;
 }

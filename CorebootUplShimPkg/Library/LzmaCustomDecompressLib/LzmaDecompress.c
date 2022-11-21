@@ -82,7 +82,7 @@ GetDecodedSizeOfBuf (
   )
 {
   UINT64  DecodedSize;
-  intn    Index;
+  INTN    Index;
 
   /* Parse header */
   DecodedSize = 0;
