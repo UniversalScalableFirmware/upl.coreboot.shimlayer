@@ -19,7 +19,12 @@
 #define CBFS_METADATA_MAX_SIZE  256
 #define CBFS_UNIVERSAL_PAYLOAD  "img/UniversalPayload"
 #define CBFS_MCACHE_ALIGNMENT   sizeof (UINT32)
-#define CBFS_ALIGNMENT 64
+#define CBFS_ALIGNMENT  64
+#define MAX_ACPI_TABLES 32
+
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+#endif
 
 struct imd_root_pointer {
   UINT32    magic;
@@ -65,6 +70,44 @@ struct cbfs_payload_segment {
 
 struct cbfs_payload {
   struct cbfs_payload_segment segments;
+};
+
+struct acpi_rsdp {
+  UINT8  signature[8]; /* RSDP signature */
+  UINT8  checksum;		 /* Checksum of the first 20 bytes */
+  UINT8  oem_id[6];	   /* OEM ID */
+  UINT8  revision;		 /* RSDP revision */
+  UINT32 rsdt_address; /* Physical address of RSDT (32 bits) */
+  UINT32 length;       /* Total RSDP length (incl. extended part) */
+  UINT64 xsdt_address; /* Physical address of XSDT (64 bits) */
+  UINT8  ext_checksum; /* Checksum of the whole table */
+  UINT8  reserved[3];
+};
+
+/* Generic ACPI header, provided by (almost) all tables */
+struct acpi_table_header {
+	UINT8  signature[4];           /* ACPI signature (4 ASCII characters) */
+	UINT32 length;                 /* Table length in bytes (incl. header) */
+	UINT8  revision;               /* Table version (not ACPI version!) */
+	UINT8  checksum;               /* To make sum of entire table == 0 */
+	UINT8  oem_id[6];              /* OEM identification */
+	UINT8  oem_table_id[8];        /* OEM table identification */
+	UINT32 oem_revision;           /* OEM revision number */
+	UINT8  asl_compiler_id[4];     /* ASL compiler vendor ID */
+	UINT32 asl_compiler_revision;  /* ASL compiler revision number */
+};
+
+/* XSDT (Extended System Description Table) */
+struct acpi_xsdt {
+	struct acpi_table_header header;
+	UINT64                   entry[MAX_ACPI_TABLES];
+};
+
+/* MADT (Multiple APIC Description Table) */
+struct acpi_madt {
+	struct acpi_table_header header;
+	UINT32                   lapic_addr;			/* Local APIC address */
+	UINT32                   flags;			/* Multiple APIC flags */
 };
 #pragma pack()
 

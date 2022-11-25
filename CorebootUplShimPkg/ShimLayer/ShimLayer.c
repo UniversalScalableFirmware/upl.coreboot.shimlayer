@@ -351,8 +351,8 @@ BuildFdtForMemory (
   Add free memory region to here.
 
   @param[in] FdtBase         Address of the Fdt data.
-  @retval SUCCESS        If it completed successfully.
-  @retval Others             If it failed to build required FDT.
+  @retval SUCCESS            If it completed successfully.
+  @retval Others             If it failed to parse CBMEM data.
 **/
 RETURN_STATUS
 BuildFdtForReservedMemory (
@@ -360,7 +360,14 @@ BuildFdtForReservedMemory (
   )
 {
   RETURN_STATUS                   Status;
-  RESOURCE_ATTRIBUTE_TYPE  Attribue;
+  RESOURCE_ATTRIBUTE_TYPE         Attribue;
+  UNIVERSAL_PAYLOAD_ACPI_TABLE    AcpiTable;
+  struct acpi_rsdp         *Rsdp = NULL;
+  struct acpi_xsdt         *Xsdt = NULL;
+  struct acpi_table_header *AcpiTableHeader = NULL;
+  struct acpi_madt         *TargetMadt = NULL;
+  INT32 i;
+  UINT8 *XsdtEnd = NULL;
 
   CreateReservedMemFdt ();
 
@@ -373,6 +380,26 @@ BuildFdtForReservedMemory (
   }
 
   //
+  // ACPI table 
+  //
+  Status = ParseAcpiTableInfo (&AcpiTable);
+  if (ERROR (Status)) {
+    return Status;
+  }
+
+  Rsdp = (struct acpi_rsdp *)AcpiTable.Rsdp;
+  Xsdt = (struct acpi_xsdt *)((UINT32)Rsdp->xsdt_address);
+  XsdtEnd = (UINT8 *)Xsdt + Xsdt->header.length;
+
+  for (i = 0; ((UINT8 *)&Xsdt->entry[i]) < XsdtEnd; i++) {
+    AcpiTableHeader = (struct acpi_table_header *)Xsdt->entry[i];
+    if (AsciiStrnCmp ((CONST CHAR8 *)AcpiTableHeader->signature, "APIC", 4) == 0){
+      TargetMadt = (struct acpi_madt *)AcpiTableHeader;
+      break;
+    }
+  }
+
+  //
   // Report Local APIC range, cause sbl HOB to be NULL, comment now
   //
   Attribue = (
@@ -382,9 +409,14 @@ BuildFdtForReservedMemory (
               RESOURCE_ATTRIBUTE_TESTED
               );
 
-  BuildReservedMemFdt (0xFEC80000, SIZE_512KB, RESOURCE_MEMORY_MAPPED_IO, Attribue);
-  BuildMemAllocFdtNode (0xFEC80000, SIZE_512KB, MemoryMappedIO);
-  BuildReservedMemUefi (mShimLayerMemory.FreeMemoryBottom, mShimLayerMemory.FreeMemoryTop);
+  if (TargetMadt != NULL) {
+    BuildReservedMemFdt ((ADDRESS)TargetMadt->lapic_addr, SIZE_512KB, RESOURCE_MEMORY_MAPPED_IO, Attribue);
+    BuildMemAllocFdtNode ((ADDRESS)TargetMadt->lapic_addr, SIZE_512KB, MemoryMappedIO);
+  } else {
+    return NOT_FOUND;
+  }
+
+  BuildReservedMemUefi ((VOID  *)mShimLayerMemory.FreeMemoryBottom, (VOID  *)mShimLayerMemory.FreeMemoryTop);
 
   return SUCCESS;
 }
