@@ -16,6 +16,18 @@
 ///
 #define MAX_ADDRESS   0xFFFFFFFFFFFFFFFFULL
 
+///
+/// Maximum legal AARCH64  address
+///
+#define MAX_ASCII_STRING_LENGTH  1000000
+
+#define SAFE_STRING_CONSTRAINT_CHECK(Expression, Status)  \
+  do { \
+    if (!(Expression)) { \
+      return Status; \
+    } \
+  } while (FALSE)
+
 /**
   Copies a source buffer to a destination buffer, and returns the destination buffer.
 
@@ -220,7 +232,7 @@ AsciiStrnLenS (
   @retval !=0      FirstString is not identical to SecondString.
 
 **/
-intn
+INTN
 AsciiStrCmp (
      const CHAR8  *FirstString,
      const CHAR8  *SecondString
@@ -256,7 +268,7 @@ AsciiStrCmp (
   @retval !=0       FirstString is not identical to SecondString.
 
 **/
-intn
+INTN
 AsciiStrnCmp (
   const CHAR8  *FirstString,
   const CHAR8  *SecondString,
@@ -288,6 +300,247 @@ AsciiStrCpyS (
   CHAR8        *Destination,
   UINTN        DestMax,
   const CHAR8  *Source
+  );
+
+/**
+  Fills a target buffer with a byte value, and returns the target buffer.
+
+  This function fills Length bytes of Buffer with Value, and returns Buffer.
+
+  If Length is greater than (MAX_ADDRESS - Buffer + 1), then ASSERT().
+
+  @param  Buffer    The memory to set.
+  @param  Length    The number of bytes to set.
+  @param  Value     The value with which to fill Length bytes of Buffer.
+
+  @return Buffer.
+
+**/
+VOID *
+SetMem (
+  OUT VOID  *Buffer,
+  IN UINTN  Length,
+  IN UINT8  Value
+  );
+
+/**
+  Compares the contents of two buffers.
+
+  This function compares Length bytes of SourceBuffer to Length bytes of DestinationBuffer.
+  If all Length bytes of the two buffers are identical, then 0 is returned.  Otherwise, the
+  value returned is the first mismatched byte in SourceBuffer subtracted from the first
+  mismatched byte in DestinationBuffer.
+
+  If Length > 0 and DestinationBuffer is NULL, then ASSERT().
+  If Length > 0 and SourceBuffer is NULL, then ASSERT().
+  If Length is greater than (MAX_ADDRESS - DestinationBuffer + 1), then ASSERT().
+  If Length is greater than (MAX_ADDRESS - SourceBuffer + 1), then ASSERT().
+
+  @param  DestinationBuffer A pointer to the destination buffer to compare.
+  @param  SourceBuffer      A pointer to the source buffer to compare.
+  @param  Length            The number of bytes to compare.
+
+  @return 0                 All Length bytes of the two buffers are identical.
+  @retval Non-zero          The first mismatched byte in SourceBuffer subtracted from the first
+                            mismatched byte in DestinationBuffer.
+
+**/
+INTN
+CompareMem (
+  IN CONST VOID  *DestinationBuffer,
+  IN CONST VOID  *SourceBuffer,
+  IN UINTN       Length
+  );
+
+/**
+  Scans a target buffer for an 8-bit value, and returns a pointer to the matching 8-bit value
+  in the target buffer.
+
+  This function searches the target buffer specified by Buffer and Length from the lowest
+  address to the highest address for an 8-bit value that matches Value.  If a match is found,
+  then a pointer to the matching byte in the target buffer is returned.  If no match is found,
+  then NULL is returned.  If Length is 0, then NULL is returned.
+
+  If Length > 0 and Buffer is NULL, then ASSERT().
+  If Length is greater than (MAX_ADDRESS - Buffer + 1), then ASSERT().
+
+  @param  Buffer      The pointer to the target buffer to scan.
+  @param  Length      The number of bytes in Buffer to scan.
+  @param  Value       The value to search for in the target buffer.
+
+  @return A pointer to the matching byte in the target buffer, or NULL otherwise.
+
+**/
+VOID *
+ScanMem8 (
+  IN CONST VOID  *Buffer,
+  IN UINTN       Length,
+  IN UINT8       Value
+  );
+
+/**
+  Returns the length of a Null-terminated ASCII string.
+
+  This function returns the number of ASCII characters in the Null-terminated
+  ASCII string specified by String.
+
+  If Length > 0 and Destination is NULL, then ASSERT().
+  If Length > 0 and Source is NULL, then ASSERT().
+  If PcdMaximumAsciiStringLength is not zero and String contains more than
+  PcdMaximumAsciiStringLength ASCII characters, not including the Null-terminator,
+  then ASSERT().
+
+  @param  String  A pointer to a Null-terminated ASCII string.
+
+  @return The length of String.
+
+**/
+UINTN
+AsciiStrLen (
+  IN      CONST CHAR8  *String
+  );
+
+/**
+  Returns the first occurrence of a Null-terminated ASCII sub-string
+  in a Null-terminated ASCII string.
+
+  This function scans the contents of the ASCII string specified by String
+  and returns the first occurrence of SearchString. If SearchString is not
+  found in String, then NULL is returned. If the length of SearchString is zero,
+  then String is returned.
+
+  If String is NULL, then ASSERT().
+  If SearchString is NULL, then ASSERT().
+
+  If PcdMaximumAsciiStringLength is not zero, and SearchString or
+  String contains more than PcdMaximumAsciiStringLength Unicode characters
+  not including the Null-terminator, then ASSERT().
+
+  @param  String          A pointer to a Null-terminated ASCII string.
+  @param  SearchString    A pointer to a Null-terminated ASCII string to search for.
+
+  @retval NULL            If the SearchString does not appear in String.
+  @retval others          If there is a match return the first occurrence of SearchingString.
+                          If the length of SearchString is zero,return String.
+
+**/
+CHAR8 *
+AsciiStrStr (
+  IN      CONST CHAR8  *String,
+  IN      CONST CHAR8  *SearchString
+  );
+
+/**
+  Convert a Null-terminated Ascii decimal string to a value of type UINTN.
+
+  This function outputs a value of type UINTN by interpreting the contents of
+  the Ascii string specified by String as a decimal number. The format of the
+  input Ascii string String is:
+
+                  [spaces] [decimal digits].
+
+  The valid decimal digit character is in the range [0-9]. The function will
+  ignore the pad space, which includes spaces or tab characters, before
+  [decimal digits]. The running zero in the beginning of [decimal digits] will
+  be ignored. Then, the function stops at the first character that is a not a
+  valid decimal character or a Null-terminator, whichever one comes first.
+
+  If String has no valid decimal digits in the above format, then 0 is stored
+  at the location pointed to by Data.
+  If the number represented by String exceeds the range defined by UINTN, then
+  MAX_UINTN is stored at the location pointed to by Data.
+
+  If EndPointer is not NULL, a pointer to the character that stopped the scan
+  is stored at the location pointed to by EndPointer. If String has no valid
+  decimal digits right after the optional pad spaces, the value of String is
+  stored at the location pointed to by EndPointer.
+
+  @param  String                   Pointer to a Null-terminated Ascii string.
+  @param  EndPointer               Pointer to character that stops scan.
+  @param  Data                     Pointer to the converted value.
+
+  @retval RETURN_SUCCESS           Value is translated from String.
+  @retval RETURN_INVALID_PARAMETER If String is NULL.
+                                   If Data is NULL.
+                                   If PcdMaximumAsciiStringLength is not zero,
+                                   and String contains more than
+                                   PcdMaximumAsciiStringLength Ascii
+                                   characters, not including the
+                                   Null-terminator.
+  @retval RETURN_UNSUPPORTED       If the number represented by String exceeds
+                                   the range defined by UINTN.
+
+**/
+RETURN_STATUS
+AsciiStrDecimalToUintnS (
+  IN  CONST CHAR8  *String,
+  OUT       CHAR8  **EndPointer   OPTIONAL,
+  OUT       UINTN  *Data
+  );
+
+/**
+  Convert a Null-terminated Ascii hexadecimal string to a value of type UINTN.
+
+  This function outputs a value of type UINTN by interpreting the contents of
+  the Ascii string specified by String as a hexadecimal number. The format of
+  the input Ascii string String is:
+
+                  [spaces][zeros][x][hexadecimal digits].
+
+  The valid hexadecimal digit character is in the range [0-9], [a-f] and [A-F].
+  The prefix "0x" is optional. Both "x" and "X" is allowed in "0x" prefix. If
+  "x" appears in the input string, it must be prefixed with at least one 0. The
+  function will ignore the pad space, which includes spaces or tab characters,
+  before [zeros], [x] or [hexadecimal digits]. The running zero before [x] or
+  [hexadecimal digits] will be ignored. Then, the decoding starts after [x] or
+  the first valid hexadecimal digit. Then, the function stops at the first
+  character that is a not a valid hexadecimal character or Null-terminator,
+  whichever on comes first.
+
+  If String has no valid hexadecimal digits in the above format, then 0 is
+  stored at the location pointed to by Data.
+  If the number represented by String exceeds the range defined by UINTN, then
+  MAX_UINTN is stored at the location pointed to by Data.
+
+  If EndPointer is not NULL, a pointer to the character that stopped the scan
+  is stored at the location pointed to by EndPointer. If String has no valid
+  hexadecimal digits right after the optional pad spaces, the value of String
+  is stored at the location pointed to by EndPointer.
+
+  @param  String                   Pointer to a Null-terminated Ascii string.
+  @param  EndPointer               Pointer to character that stops scan.
+  @param  Data                     Pointer to the converted value.
+
+  @retval RETURN_SUCCESS           Value is translated from String.
+  @retval RETURN_INVALID_PARAMETER If String is NULL.
+                                   If Data is NULL.
+                                   If PcdMaximumAsciiStringLength is not zero,
+                                   and String contains more than
+                                   PcdMaximumAsciiStringLength Ascii
+                                   characters, not including the
+                                   Null-terminator.
+  @retval RETURN_UNSUPPORTED       If the number represented by String exceeds
+                                   the range defined by UINTN.
+
+**/
+RETURN_STATUS
+AsciiStrHexToUintnS (
+  IN  CONST CHAR8  *String,
+  OUT       CHAR8  **EndPointer   OPTIONAL,
+  OUT       UINTN  *Data
+  );
+
+RETURN_STATUS
+AddrToAsciiS (
+  IN   UINTN  Address,
+  OUT  UINT8  *String
+  );
+
+RETURN_STATUS
+AsciiStrCat (
+  IN OUT CHAR8        *Destination,
+  IN     UINTN        DestMax,
+  IN     CONST CHAR8  *Source
   );
 
 #endif // __BASE_LIB__

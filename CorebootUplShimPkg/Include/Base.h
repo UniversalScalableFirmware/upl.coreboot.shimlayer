@@ -46,8 +46,14 @@ typedef unsigned char UINT8;
 typedef char CHAR8;
 typedef signed char INT8;
 typedef UINT32 UINTN;
-typedef INT32 intn;
+typedef INT32 INTN;
 typedef UINT64 ADDRESS;
+
+///
+/// Maximum legal ARM INTN and UINTN values.
+///
+#define MAX_INTN   ((INTN)0x7FFFFFFF)
+#define MAX_UINTN  ((UINTN)0xFFFFFFFF)
 
 ///
 /// Function return status for EFI API.
@@ -217,7 +223,7 @@ typedef struct {
 ///
 #define ENCODE_ERROR(a)              ((RETURN_STATUS)(MAX_BIT | (a)))
 #define ENCODE_WARNING(a)            ((RETURN_STATUS)(a))
-#define RETURN_ERROR(a)              (((intn)(RETURN_STATUS)(a)) < 0)
+#define RETURN_ERROR(a)              (((INTN)(RETURN_STATUS)(a)) < 0)
 #define RETURN_ABORTED               ENCODE_ERROR (21)
 #define RETURN_UNSUPPORTED           ENCODE_ERROR (3)
 #define RETURN_NOT_FOUND             ENCODE_ERROR (14)
@@ -650,7 +656,7 @@ InternalSwitchStack (
   );
 
 typedef
-intn
+INTN
 ( *BASE_SORT_COMPARE)(
     CONST VOID                 *Buffer1,
     CONST VOID                 *Buffer2

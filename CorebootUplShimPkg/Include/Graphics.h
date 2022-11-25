@@ -38,22 +38,22 @@ typedef enum {
   ///
   PixelBltOnly,
   ///
-  /// Valid GRAPHICS_PIXEL_FORMAT enum values are less than this value.
+  /// Valid EFI_GRAPHICS_PIXEL_FORMAT enum values are less than this value.
   ///
   PixelFormatMax
-} GRAPHICS_PIXEL_FORMAT;
+} EFI_GRAPHICS_PIXEL_FORMAT;
 
 typedef struct {
   UINT32            RedMask;
   UINT32            GreenMask;
   UINT32            BlueMask;
   UINT32            ReservedMask;
-} PIXEL_BITMASK;
+} EFI_PIXEL_BITMASK;
 
 typedef struct {
   ///
   /// The version of this data structure. A value of zero represents the
-  /// GRAPHICS_OUTPUT_MODE_INFORMATION structure as defined in this specification.
+  /// EFI_GRAPHICS_OUTPUT_MODE_INFORMATION structure as defined in this specification.
   ///
   UINT32                     Version;
   ///
@@ -68,23 +68,23 @@ typedef struct {
   /// Enumeration that defines the physical format of the pixel. A value of PixelBltOnly
   /// implies that a linear frame buffer is not available for this mode.
   ///
-  GRAPHICS_PIXEL_FORMAT      PixelFormat;
+  EFI_GRAPHICS_PIXEL_FORMAT  PixelFormat;
   ///
   /// This bit-mask is only valid if PixelFormat is set to PixelPixelBitMask.
   /// A bit being set defines what bits are used for what purpose such as Red, Green, Blue, or Reserved.
   ///
-  PIXEL_BITMASK              PixelInformation;
+  EFI_PIXEL_BITMASK          PixelInformation;
   ///
   /// Defines the number of pixel elements per video memory line.
   ///
   UINT32                     PixelsPerScanLine;
-} GRAPHICS_OUTPUT_MODE_INFORMATION;
+} EFI_GRAPHICS_OUTPUT_MODE_INFORMATION;
 
 typedef struct {
-  ADDRESS                           FrameBufferBase;
-  UINT32                            FrameBufferSize;
-  GRAPHICS_OUTPUT_MODE_INFORMATION  GraphicsMode;
-} PEI_GRAPHICS_INFO_HOB;
+  ADDRESS                               FrameBufferBase;
+  UINT32                                FrameBufferSize;
+  EFI_GRAPHICS_OUTPUT_MODE_INFORMATION  GraphicsMode;
+} EFI_PEI_GRAPHICS_INFO_HOB;
 
 typedef struct {
   UINT16                                VendorId;           ///< Ignore if the value is 0xFFFF.
@@ -93,6 +93,6 @@ typedef struct {
   UINT16                                SubsystemId;        ///< Ignore if the value is 0xFFFF.
   UINT8                                 RevisionId;         ///< Ignore if the value is 0xFF.
   UINT8                                 BarIndex;           ///< Ignore if the value is 0xFF.
-} PEI_GRAPHICS_DEVICE_INFO_HOB;
+} EFI_PEI_GRAPHICS_DEVICE_INFO_HOB;
 
 #endif // __GRAPHICS_H__
