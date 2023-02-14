@@ -431,6 +431,35 @@ AsciiStrStr (
   );
 
 /**
+  This function returns a pointer to the last occurrence of a character
+  in a Null-terminated ASCII string.
+
+  The character whose last occurrence we want to find is passed as 
+  the second argumentto the function and the Null-terminated ASCII string in which we have to find the character is passed as
+  the first argument to the function. 
+
+  If String is NULL, then ASSERT().
+  If SearchString is NULL, then ASSERT().
+
+  If PcdMaximumAsciiStringLength is not zero, and SearchString or
+  String contains more than PcdMaximumAsciiStringLength Unicode characters
+  not including the Null-terminator, then ASSERT().
+
+  @param  String          A pointer to a Null-terminated ASCII string.
+  @param  TargetChar      A character in a Null-terminated ASCII string to search for.
+
+  @retval NULL            If the SearchString does not appear in String.
+  @retval others          If there is a match return the first occurrence of SearchingString.
+                          If the length of SearchString is zero,return String.
+
+**/
+CHAR8 *
+AsciiStrrStr (
+  IN      CONST CHAR8  *String,
+  IN      CONST INT32  TargetChar
+  );
+
+/**
   Convert a Null-terminated Ascii decimal string to a value of type UINTN.
 
   This function outputs a value of type UINTN by interpreting the contents of

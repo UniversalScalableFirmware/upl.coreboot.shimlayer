@@ -34,6 +34,7 @@ MAKE_FILE = $(WORKSPACE)/GNUmakefile
 #
 OBJECT_FILES =  \
 	$(OUTPUT_DIR)/fdt_addresses.o \
+	$(OUTPUT_DIR)/fdt_check.o \
 	$(OUTPUT_DIR)/fdt_empty_tree.o \
 	$(OUTPUT_DIR)/fdt_overlay.o \
 	$(OUTPUT_DIR)/fdt_ro.o \
@@ -84,6 +85,9 @@ dirs:
 #
 $(OUTPUT_DIR)/fdt_addresses.o : $(SOURCE_DIR)/fdt_addresses.c
 	"$(CC)" $(DEPS_FLAGS) $(CC_FLAGS) -c -o $(OUTPUT_DIR)/fdt_addresses.o $(INC) $(SOURCE_DIR)/fdt_addresses.c
+
+$(OUTPUT_DIR)/fdt_check.o : $(SOURCE_DIR)/fdt_check.c
+	"$(CC)" $(DEPS_FLAGS) $(CC_FLAGS) -c -o $(OUTPUT_DIR)/fdt_check.o $(INC) $(SOURCE_DIR)/fdt_check.c
 
 $(OUTPUT_DIR)/fdt_empty_tree.o : $(SOURCE_DIR)/fdt_empty_tree.c
 	"$(CC)" $(DEPS_FLAGS) $(CC_FLAGS) -c -o $(OUTPUT_DIR)/fdt_empty_tree.o $(INC) $(SOURCE_DIR)/fdt_empty_tree.c

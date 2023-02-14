@@ -16,12 +16,30 @@ typedef UINT16  fdt16_t;
 typedef UINT32  fdt32_t;
 typedef UINT64  fdt64_t;
 
+typedef BOOLEAN bool;
 typedef UINT8   uint8_t;
 typedef UINT16  uint16_t;
 typedef UINT32  uint32_t;
 typedef UINT64  uint64_t;
 typedef UINTN   uintptr_t;
 typedef UINTN   size_t;
+
+typedef INT8    int8_t;
+typedef INT16   int16_t;
+typedef INT32   int32_t;
+typedef INT64   int64_t;
+
+#define true        ((unsigned char)(1==1))
+#define false       ((unsigned char)(0==1))
+#define UINT32_MAX  ((uint32_t)0xFFFFFFFF)
+#define INT_MAX     ((int32_t)0x7FFFFFFF)
+#define INT32_MAX   ((int32_t)0x7FFFFFFF)
+
+extern unsigned long strtoul (
+  const char  *nptr,
+  char        **endptr,
+  int         base
+  );
 
 static inline uint16_t
 SwapBytes16 (
@@ -157,6 +175,15 @@ strchr (
   pattern[0] = c;
   pattern[1] = 0;
   return AsciiStrStr (s, pattern);
+}
+
+static inline char *
+strrchr (
+  const char  *s,
+  int         c
+  )
+{
+  return AsciiStrrStr (s, c);
 }
 
 static inline size_t
