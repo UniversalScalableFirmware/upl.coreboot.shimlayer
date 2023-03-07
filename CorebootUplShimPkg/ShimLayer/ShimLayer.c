@@ -360,14 +360,6 @@ BuildFdtForReservedMemory (
   )
 {
   RETURN_STATUS                   Status;
-  RESOURCE_ATTRIBUTE_TYPE         Attribue;
-  UNIVERSAL_PAYLOAD_ACPI_TABLE    AcpiTable;
-  struct acpi_rsdp         *Rsdp = NULL;
-  struct acpi_xsdt         *Xsdt = NULL;
-  struct acpi_table_header *AcpiTableHeader = NULL;
-  struct acpi_madt         *TargetMadt = NULL;
-  INT32 i;
-  UINT8 *XsdtEnd = NULL;
 
   CreateReservedMemFdt ();
 
@@ -377,43 +369,6 @@ BuildFdtForReservedMemory (
   Status = ParseMemoryInfo (MemInfoCallbackMmio, NULL);
   if (ERROR (Status)) {
     return Status;
-  }
-
-  //
-  // ACPI table 
-  //
-  Status = ParseAcpiTableInfo (&AcpiTable);
-  if (ERROR (Status)) {
-    return Status;
-  }
-
-  Rsdp = (struct acpi_rsdp *)AcpiTable.Rsdp;
-  Xsdt = (struct acpi_xsdt *)((UINT32)Rsdp->xsdt_address);
-  XsdtEnd = (UINT8 *)Xsdt + Xsdt->header.length;
-
-  for (i = 0; ((UINT8 *)&Xsdt->entry[i]) < XsdtEnd; i++) {
-    AcpiTableHeader = (struct acpi_table_header *)Xsdt->entry[i];
-    if (AsciiStrnCmp ((CONST CHAR8 *)AcpiTableHeader->signature, "APIC", 4) == 0){
-      TargetMadt = (struct acpi_madt *)AcpiTableHeader;
-      break;
-    }
-  }
-
-  //
-  // Report Local APIC range, cause sbl HOB to be NULL, comment now
-  //
-  Attribue = (
-              RESOURCE_ATTRIBUTE_PRESENT |
-              RESOURCE_ATTRIBUTE_INITIALIZED |
-              RESOURCE_ATTRIBUTE_UNCACHEABLE |
-              RESOURCE_ATTRIBUTE_TESTED
-              );
-
-  if (TargetMadt != NULL) {
-    BuildReservedMemFdt ((ADDRESS)TargetMadt->lapic_addr, SIZE_512KB, RESOURCE_MEMORY_MAPPED_IO, Attribue);
-    BuildMemAllocFdtNode ((ADDRESS)TargetMadt->lapic_addr, SIZE_512KB, MemoryMappedIO);
-  } else {
-    return NOT_FOUND;
   }
 
   BuildReservedMemUefi ((VOID  *)mShimLayerMemory.FreeMemoryBottom, (VOID  *)mShimLayerMemory.FreeMemoryTop);
@@ -641,6 +596,9 @@ LoadPayload (
   if (ERROR (Status)) {
     return Status;
   }
+
+  SetFdtPayloadBase (Dest);
+
   Status = ParseElfImage (Dest, &Context);
   if (ERROR (Status)) {
     return Status;
@@ -700,8 +658,6 @@ LoadPayload (
   } else {
     Context.ImageAddress = Context.FileBase;
   }
-
-  SetFdtUplExtraData ((ADDRESS)ExtraData);
 
   //
   // Load ELF into the required base

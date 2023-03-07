@@ -158,7 +158,7 @@ BuildReservedMemUefi (
   );
 
 /**
-  Save extra data allocate address.
+  Save payload base address.
 
   @param  BaseAddress    Extra data start address
 
@@ -166,6 +166,6 @@ BuildReservedMemUefi (
 
 **/
 RETURN_STATUS
-SetFdtUplExtraData (
+SetFdtPayloadBase (
   IN  ADDRESS  BaseAddress
   );

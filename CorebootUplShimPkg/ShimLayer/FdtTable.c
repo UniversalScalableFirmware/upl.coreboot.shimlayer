@@ -6,8 +6,8 @@ STATIC INT32    mReservedMemParentNode = 0;
 //
 // Fdt need to add by order, so need some variable to save the target data first.
 //
-STATIC FDT_ALLOC_LIST                mFdtAllocList = {0};
-STATIC UNIVERSAL_PAYLOAD_EXTRA_DATA  *UplExtraData = NULL;
+STATIC FDT_ALLOC_LIST                mFdtAllocList   = {0};
+STATIC ADDRESS                       mFdtPayloadBase = NULL;
 
 #define MEMORY_ATTRIBUTE_DEFAULT  (  RESOURCE_ATTRIBUTE_PRESENT                 | \
                                      RESOURCE_ATTRIBUTE_INITIALIZED             | \
@@ -166,6 +166,28 @@ FdtTableInit (
 }
 
 /**
+  Build payload base address fdt node.
+
+  @retval SUCCESS    If it completed successfully.
+
+**/
+RETURN_STATUS
+BuildPayloadBaseFdt (
+  VOID
+  )
+{
+  RETURN_STATUS    Status;
+  INT32            TempNode;
+
+  TempNode = fdt_add_subnode(mFdtTable, 0, "PayloadBase");
+
+  Status = fdt_setprop_u64(mFdtTable, TempNode, "entry", (UINT64)mFdtPayloadBase);
+  if (ERROR (Status)) {
+    return Status;
+  }
+}
+
+/**
   It will build FDT based on memory allocation information from Hobs.
 
   @retval SUCCESS  If it completed successfully.
@@ -281,45 +303,6 @@ BuildFdtForUplRequired (
   UINT8                             TempAddrStr[9];
 
   //
-  // Create UPL FV FDT node
-  //
-  if (UplExtraData != NULL) {
-    TempNode = fdt_add_subnode(mFdtTable, 0, "extra-data");
-
-    Status = fdt_setprop_u32(mFdtTable, TempNode, "count", UplExtraData->Count);
-    if (ERROR (Status)) {
-      return Status;
-    }
-
-    for (i = 0; i < UplExtraData->Count; i++) {
-      ZeroMem (TempStr, sizeof(TempStr));
-      ZeroMem (TempAddrStr, sizeof(TempAddrStr));
-
-      CopyMem (TempStr, "entry@", sizeof("entry@"));
-      AddrToAsciiS ((UINTN)i, TempAddrStr);
-      AsciiStrCat ((CHAR8 *)TempStr, sizeof(TempAddrStr), (CHAR8 *)TempAddrStr);
-      TempNode = fdt_add_subnode(mFdtTable, TempNode, (CHAR8 *)TempStr);
-
-      fdt_setprop_cell(mFdtTable, TempNode, "#address-cells", 2);
-      fdt_setprop_cell(mFdtTable, TempNode, "#size-cells", 2);
-
-      Status = fdt_setprop(mFdtTable, TempNode, "id", (VOID *)UplExtraData->Entry[i].Identifier, sizeof(UplExtraData->Entry[i].Identifier));
-      if (ERROR (Status)) {
-        return Status;
-      }
-
-      RegData[0] = cpu_to_fdt64(UplExtraData->Entry[i].Base);
-      RegData[1] = cpu_to_fdt64(UplExtraData->Entry[i].Size);
-      Status = fdt_setprop(mFdtTable, TempNode, "reg", &RegData, sizeof(RegData));
-      if (ERROR (Status)) {
-        return Status;
-      }
-
-      break;
-    }
-  }
-
-  //
   // Build CPU memory space and IO space hob
   //
   AsmCpuid (0x80000000, &RegEax, NULL, NULL, NULL);
@@ -334,11 +317,6 @@ BuildFdtForUplRequired (
   TempNode = fdt_add_subnode(mFdtTable, 0, "cpu-info");
 
   Status = fdt_setprop_u32(mFdtTable, TempNode, "memoryspace", (UINT32)PhysicalAddressBits);
-  if (ERROR (Status)) {
-    return Status;
-  }
-
-  Status = fdt_setprop_u32(mFdtTable, TempNode, "iospace", 16);
   if (ERROR (Status)) {
     return Status;
   }
@@ -450,6 +428,11 @@ BuildFdtForUplRequired (
     }
   }
 
+  //
+  // Build payload base address.
+  //
+  BuildPayloadBaseFdt ();
+
   return SUCCESS;
 }
 
@@ -555,7 +538,7 @@ BuildMemInfoFdt (
   }
 
   if (Attribute != MEMORY_ATTRIBUTE_DEFAULT) {
-    Status = fdt_setprop_u32(mFdtTable, TempNode, "Attribute", Attribute);
+    Status = fdt_setprop_u32(mFdtTable, TempNode, "attr", Attribute);
     if (ERROR (Status)) {
       return Status;
     }
@@ -620,7 +603,7 @@ BuildReservedMemFdt (
     }
 
     if (Attribute != MEMORY_ATTRIBUTE_DEFAULT) {
-      Status = fdt_setprop_u32(mFdtTable, TempNode, "Attribute", Attribute);
+      Status = fdt_setprop_u32(mFdtTable, TempNode, "attr", Attribute);
       if (ERROR (Status)) {
         return Status;
       }
@@ -663,7 +646,7 @@ BuildReservedMemUefi (
 }
 
 /**
-  Save extra data allocate address.
+  Save payload base address.
 
   @param  BaseAddress    Extra data start address
 
@@ -671,14 +654,14 @@ BuildReservedMemUefi (
 
 **/
 RETURN_STATUS
-SetFdtUplExtraData (
+SetFdtPayloadBase (
   IN  ADDRESS  BaseAddress
   )
 {
-  if ((UNIVERSAL_PAYLOAD_EXTRA_DATA  *)BaseAddress == NULL) {
+  if (BaseAddress == NULL) {
     return INVALID_PARAMETER;
   }
 
-  UplExtraData = (UNIVERSAL_PAYLOAD_EXTRA_DATA  *)BaseAddress;
+  mFdtPayloadBase = BaseAddress;
   return SUCCESS;
 }
