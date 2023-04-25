@@ -14,11 +14,12 @@
 #include <ParseLib.h>
 #include <ShimLayer/PiFirmware.h>
 #include <ShimLayer/DevicePath.h>
-#include <ElfLibInternal.h>
 #include <CorebootRelated.h>
 #include <Graphics.h>
 #include <UniversalPayload.h>
 #include <SerialPort.h>
+
+#include "FdtTable.h"
 
 #define LEGACY_8259_MASK_REGISTER_MASTER  0x21
 #define LEGACY_8259_MASK_REGISTER_SLAVE   0xA1

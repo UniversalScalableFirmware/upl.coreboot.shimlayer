@@ -11,17 +11,24 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #ifndef __UNIVERSAL_PAYLOAD_H__
 #define __UNIVERSAL_PAYLOAD_H__
 
+#define DEBUG_PRINT(Value) __asm__ __volatile__ ("outb %b0,%w1" : : "a" (Value), "d" ((UINT16)0x80));
+
+#define DEBUG_PRINT_ADDR(Value) ({__asm__ __volatile__ ("outb %b0,%w1" : : "a" (0xaa),        "d" ((UINT16)0x80));\
+                                  __asm__ __volatile__ ("outb %b0,%w1" : : "a" (0xff),        "d" ((UINT16)0x80));\
+                                  __asm__ __volatile__ ("outb %b0,%w1" : : "a" (Value >> 24), "d" ((UINT16)0x80));\
+                                  __asm__ __volatile__ ("outb %b0,%w1" : : "a" (0xff),        "d" ((UINT16)0x80));\
+                                  __asm__ __volatile__ ("outb %b0,%w1" : : "a" (Value >> 16), "d" ((UINT16)0x80));\
+                                  __asm__ __volatile__ ("outb %b0,%w1" : : "a" (0xff),        "d" ((UINT16)0x80));\
+                                  __asm__ __volatile__ ("outb %b0,%w1" : : "a" (Value >> 8),  "d" ((UINT16)0x80));\
+                                  __asm__ __volatile__ ("outb %b0,%w1" : : "a" (0xff),        "d" ((UINT16)0x80));\
+                                  __asm__ __volatile__ ("outb %b0,%w1" : : "a" (Value),       "d" ((UINT16)0x80));})
+
 /**
   Main entry point to Universal Payload.
 
   @param HobList  Pointer to the beginning of the HOB List from boot loader.
 **/
 typedef  VOID ( *UNIVERSAL_PAYLOAD_ENTRY)(VOID *HobList);
-
-#define UNIVERSAL_PAYLOAD_IDENTIFIER                    SIGNATURE_32('P', 'L', 'D', 'H')
-#define UNIVERSAL_PAYLOAD_INFO_SEC_NAME                 ".upld_info"
-#define UNIVERSAL_PAYLOAD_EXTRA_SEC_NAME_PREFIX         ".upld."
-#define UNIVERSAL_PAYLOAD_EXTRA_SEC_NAME_PREFIX_LENGTH  (sizeof (UNIVERSAL_PAYLOAD_EXTRA_SEC_NAME_PREFIX) - 1)
 
 #pragma pack(1)
 
@@ -42,6 +49,11 @@ typedef struct {
   UINT8     Reserved;
   UINT16    Length;
 } UNIVERSAL_PAYLOAD_GENERIC_HEADER;
+
+typedef struct {
+  UNIVERSAL_PAYLOAD_GENERIC_HEADER Header;
+  ADDRESS                          Entry;
+} UNIVERSAL_PAYLOAD_BASE;
 
 typedef struct {
   UNIVERSAL_PAYLOAD_GENERIC_HEADER    Header;
@@ -140,18 +152,6 @@ typedef struct {
 #define PCI_ATTRIBUTE_VGA_PALETTE_IO_16           0x20000
 #define PCI_ATTRIBUTE_VGA_IO_16                   0x40000
 
-typedef struct {
-  CHAR8    Identifier[16];
-  ADDRESS  Base;
-  UINT64   Size;
-} UNIVERSAL_PAYLOAD_EXTRA_DATA_ENTRY;
-
-typedef struct {
-  UNIVERSAL_PAYLOAD_GENERIC_HEADER      Header;
-  UINT32                                Count;
-  UNIVERSAL_PAYLOAD_EXTRA_DATA_ENTRY    Entry[0];
-} UNIVERSAL_PAYLOAD_EXTRA_DATA;
-
 #pragma pack()
 
 /**
@@ -169,13 +169,11 @@ typedef struct {
 #define UNIVERSAL_PAYLOAD_ACPI_TABLE_REVISION        1
 #define UNIVERSAL_PAYLOAD_PCI_ROOT_BRIDGES_REVISION  1
 #define UNIVERSAL_PAYLOAD_SERIAL_PORT_INFO_REVISION  1
-#define UNIVERSAL_PAYLOAD_EXTRA_DATA_REVISION        1
 
 extern GUID gUniversalPayloadPciRootBridgeInfoGuid;
 extern GUID gUniversalPayloadSmbios3TableGuid;
 extern GUID gUniversalPayloadSmbiosTableGuid;
 extern GUID gUniversalPayloadAcpiTableGuid;
-extern GUID gUniversalPayloadExtraDataGuid;
 extern GUID gUniversalPayloadSerialPortInfoGuid;
 
 #endif // __UNIVERSAL_PAYLOAD_H__

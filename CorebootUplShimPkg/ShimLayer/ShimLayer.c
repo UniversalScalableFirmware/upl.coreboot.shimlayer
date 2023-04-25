@@ -13,8 +13,8 @@ GUID gGraphicsInfoHobGuid                   = { 0x39f62cce, 0x6825, 0x4669, { 0x
 GUID gGraphicsDeviceInfoHobGuid             = { 0xe5cb2ac9, 0xd35d, 0x4430, { 0x93, 0x6e, 0x1d, 0xe3, 0x32, 0x47, 0x8d, 0xe7 }};
 GUID gUniversalPayloadSmbiosTableGuid       = { 0x590a0d26, 0x06e5, 0x4d20, { 0x8a, 0x82, 0x59, 0xea, 0x1b, 0x34, 0x98, 0x2d }};
 GUID gUniversalPayloadAcpiTableGuid         = { 0x9f9a9506, 0x5597, 0x4515, { 0xba, 0xb6, 0x8b, 0xcd, 0xe7, 0x84, 0xba, 0x87 }};
-GUID gUniversalPayloadExtraDataGuid         = { 0x15a5baf6, 0x1c91, 0x467d, { 0x9d, 0xfb, 0x31, 0x9d, 0x17, 0x8d, 0x4b, 0xb4 }};
 GUID gUniversalPayloadSerialPortInfoGuid    = { 0xaa7e190d, 0xbe21, 0x4409, { 0x8e, 0x67, 0xa2, 0xcd, 0x0f, 0x61, 0xe1, 0x70 }};
+GUID gUniversalPayloadBaseGuid              = { 0x03d4c61d, 0x2713, 0x4ec5, {0xa1, 0xcc, 0x88, 0x3b, 0xe9, 0xdc, 0x18, 0xe5 } };
 
 /**
   Allocates one or more pages of type BootServicesData.
@@ -339,10 +339,10 @@ BuildHobFromBl (
   )
 {
   RETURN_STATUS                       Status;
-  PEI_GRAPHICS_INFO_HOB               GfxInfo;
-  PEI_GRAPHICS_INFO_HOB               *NewGfxInfo;
-  PEI_GRAPHICS_DEVICE_INFO_HOB        GfxDeviceInfo;
-  PEI_GRAPHICS_DEVICE_INFO_HOB        *NewGfxDeviceInfo;
+  EFI_PEI_GRAPHICS_INFO_HOB           GfxInfo;
+  EFI_PEI_GRAPHICS_INFO_HOB           *NewGfxInfo;
+  EFI_PEI_GRAPHICS_DEVICE_INFO_HOB    GfxDeviceInfo;
+  EFI_PEI_GRAPHICS_DEVICE_INFO_HOB    *NewGfxDeviceInfo;
   UNIVERSAL_PAYLOAD_SMBIOS_TABLE      *SmBiosTableHob;
   UNIVERSAL_PAYLOAD_ACPI_TABLE        *AcpiTableHob;
 
@@ -574,93 +574,57 @@ LoadPayload (
   OUT    ADDRESS        *UniversalPayloadEntry
   )
 {
-  RETURN_STATUS                  Status;
-  UINT32                         Index;
-  UINT16                         ExtraDataIndex;
-  CHAR8                          *SectionName;
-  UINTN                          Offset;
-  UINTN                          Size;
-  UINTN                          Length;
-  UINT32                         ExtraDataCount;
-  ELF_IMAGE_CONTEXT              Context;
-  UNIVERSAL_PAYLOAD_EXTRA_DATA   *ExtraData;
-  VOID *Dest;
+  RETURN_STATUS           Status;
+  UINTN                   Index;
+  FIT_IMAGE_CONTEXT       Context;
+  VOID                    *Dest;
+  UNIVERSAL_PAYLOAD_BASE  *PayloadBase;
+  UINTN                   Length;
+  UINTN                   Delta;
+  FIT_RELOCATE_ITEM       *RelocateTable;
 
   Status = LocateAndDecompressPayload (&Dest);
   if (ERROR (Status)) {
     return Status;
   }
-  Status = ParseElfImage (Dest, &Context);
+
+  ZeroMem (&Context, sizeof (Context));
+  Status = ParseFitImage (Dest, &Context);
   if (ERROR (Status)) {
     return Status;
   }
 
-  //
-  // Get UNIVERSAL_PAYLOAD_INFO_HEADER and number of additional PLD sections.
-  //
-
-  ExtraDataCount = 0;
-  for (Index = 0; Index < Context.ShNum; Index++) {
-    Status = GetElfSectionName (&Context, Index, &SectionName);
-    if (ERROR (Status)) {
-      continue;
+  Context.PayloadBaseAddress = (ADDRESS)Dest;
+  RelocateTable = (FIT_RELOCATE_ITEM *)(UINTN) ((UINTN)Dest + Context.RelocateTableOffset);
+  if (Context.PayloadBaseAddress > Context.PayloadLoadAddress) {
+    Delta = Context.PayloadBaseAddress - Context.PayloadLoadAddress;
+    Context.PayloadEntryPoint += Delta;
+    for (Index = 0; Index < Context.RelocateTableCount; Index++) {
+      if (RelocateTable[Index].RelocateType == 3 || RelocateTable[Index].RelocateType == 10) {
+        *((UINT64*) (Context.PayloadBaseAddress + RelocateTable[Index].Offset)) = *((UINT64*) (Context.PayloadBaseAddress + RelocateTable[Index].Offset)) + Delta;
+      }
     }
-
-    if (AsciiStrnCmp (SectionName, UNIVERSAL_PAYLOAD_EXTRA_SEC_NAME_PREFIX, UNIVERSAL_PAYLOAD_EXTRA_SEC_NAME_PREFIX_LENGTH) == 0) {
-      Status = GetElfSectionPos (&Context, Index, &Offset, &Size);
-      if (!ERROR (Status)) {
-        ExtraDataCount++;
+  } else {
+    Delta = Context.PayloadLoadAddress - Context.PayloadBaseAddress;
+    Context.PayloadEntryPoint -= Delta;
+    for (Index = 0; Index < Context.RelocateTableCount; Index++) {
+      if (RelocateTable[Index].RelocateType == 3 || RelocateTable[Index].RelocateType == 10) {
+        *((UINT64*) (Context.PayloadBaseAddress + RelocateTable[Index].Offset)) = *((UINT64*) (Context.PayloadBaseAddress + RelocateTable[Index].Offset)) - Delta;
       }
     }
   }
 
-  //
-  // Report the additional PLD sections through HOB.
-  //
-  Length    = sizeof (UNIVERSAL_PAYLOAD_EXTRA_DATA) + ExtraDataCount * sizeof (UNIVERSAL_PAYLOAD_EXTRA_DATA_ENTRY);
-  ExtraData = BuildGuidHob (
-                &gUniversalPayloadExtraDataGuid,
+  Length    = sizeof (UNIVERSAL_PAYLOAD_BASE);
+  PayloadBase = BuildGuidHob (
+                &gUniversalPayloadBaseGuid,
                 Length
                 );
-  ExtraData->Count           = ExtraDataCount;
-  ExtraData->Header.Revision = UNIVERSAL_PAYLOAD_EXTRA_DATA_REVISION;
-  ExtraData->Header.Length   = (UINT16)Length;
-  if (ExtraDataCount != 0) {
-    for (ExtraDataIndex = 0, Index = 0; Index < Context.ShNum; Index++) {
-      Status = GetElfSectionName (&Context, Index, &SectionName);
-      if (ERROR (Status)) {
-        continue;
-      }
+  PayloadBase->Entry = (ADDRESS)Context.PayloadBaseAddress;
 
-      if (AsciiStrnCmp (SectionName, UNIVERSAL_PAYLOAD_EXTRA_SEC_NAME_PREFIX, UNIVERSAL_PAYLOAD_EXTRA_SEC_NAME_PREFIX_LENGTH) == 0) {
-        Status = GetElfSectionPos (&Context, Index, &Offset, &Size);
-        if (!ERROR (Status)) {
-          AsciiStrCpyS (
-            ExtraData->Entry[ExtraDataIndex].Identifier,
-            sizeof (ExtraData->Entry[ExtraDataIndex].Identifier),
-            SectionName + UNIVERSAL_PAYLOAD_EXTRA_SEC_NAME_PREFIX_LENGTH
-            );
-          ExtraData->Entry[ExtraDataIndex].Base = (UINTN)(Context.FileBase + Offset);
-          ExtraData->Entry[ExtraDataIndex].Size = Size;
-          ExtraDataIndex++;
-        }
-      }
-    }
-  }
-  if (Context.ReloadRequired || (Context.PreferredImageAddress != Context.FileBase)) {
-    Context.ImageAddress = AllocatePages (SIZE_TO_PAGES (Context.ImageSize));
-  } else {
-    Context.ImageAddress = Context.FileBase;
-  }
-  //
-  // Load ELF into the required base
-  //
-  Status = LoadElfImage (&Context);
-  if (!ERROR (Status)) {
-    *ImageAddressArg        = (UINTN)Context.ImageAddress;
-    *UniversalPayloadEntry  = Context.EntryPoint;
-    *ImageSizeArg           = Context.ImageSize;
-  }
+  *ImageAddressArg       = Context.PayloadBaseAddress;
+  *ImageSizeArg          = Context.PayloadSize;
+  *UniversalPayloadEntry = Context.PayloadEntryPoint;
+
   return Status;
 }
 

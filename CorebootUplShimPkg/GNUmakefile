@@ -61,13 +61,14 @@ MAKE_FILE = $(WORKSPACE)/GNUmakefile
 STATIC_LIBRARY_FILES =  \
   $(BUILD_DIR)/Library/BaseLib/OUTPUT/BaseLib.lib \
   $(BUILD_DIR)/Library/HobLib/OUTPUT/HobLib.lib \
+  $(BUILD_DIR)/Library/FdtLib/OUTPUT/FdtLib.lib \
   $(BUILD_DIR)/Library/ParseLib/OUTPUT/ParseLib.lib \
-  $(BUILD_DIR)/Library/ElfLoaderLib/OUTPUT/ElfLoaderLib.lib \
   $(BUILD_DIR)/Library/LzmaCustomDecompressLib/OUTPUT/LzmaDecompressLib.lib \
   $(OUTPUT_DIR)/ShimLayer.lib
 
 OBJECT_FILES =  \
   $(OUTPUT_DIR)/CpuId.o \
+  $(OUTPUT_DIR)/FdtTable.o \
   $(OUTPUT_DIR)/ShimLayer.o
 
 INC =  \
@@ -75,11 +76,10 @@ INC =  \
   -I$(WORKSPACE)/ShimLayer \
   -I$(WORKSPACE) \
   -I$(WORKSPACE)/Include \
-  -I$(WORKSPACE)/Library/ElfLoaderLib \
-  -I$(WORKSPACE)/Library/ElfLoaderLib/ElfLib \
   -I$(WORKSPACE)/Library/LzmaCustomDecompressLib \
   -I$(WORKSPACE)/Library/BaseLib \
   -I$(WORKSPACE)/Library/HobLib \
+  -I$(WORKSPACE)/Library/FdtLib \
   -I$(WORKSPACE)/Library/ParseLib 
 
 NASM_INC =  \
@@ -127,9 +127,9 @@ dirs:
 gen_libs:
 	$(MAKE) $(MAKE_FLAGS) -f $(WORKSPACE)/Library/BaseLib/GNUmakefile
 	$(MAKE) $(MAKE_FLAGS) -f $(WORKSPACE)/Library/HobLib/GNUmakefile
+	$(MAKE) $(MAKE_FLAGS) -f $(WORKSPACE)/Library/FdtLib/GNUmakefile
 	$(MAKE) $(MAKE_FLAGS) -f $(WORKSPACE)/Library/ParseLib/GNUmakefile
 	$(MAKE) $(MAKE_FLAGS) -f $(WORKSPACE)/Library/LzmaCustomDecompressLib/GNUmakefile
-	$(MAKE) $(MAKE_FLAGS) -f $(WORKSPACE)/Library/ElfLoaderLib/GNUmakefile
 
 #
 # Individual Object Build Targets
@@ -137,7 +137,10 @@ gen_libs:
 $(DEBUG_DIR)/ShimLayer.elf : $(STATIC_LIBRARY_FILES)
 	"$(DLINK)" -o $(DEBUG_DIR)/ShimLayer.elf $(DLINK_FLAGS) -Wl,--start-group,$(STATIC_LIBRARY_FILES) -Wl,--end-group $(CC_FLAGS) $(DLINK2_FLAGS)
 	"$(OBJCOPY)" $(OBJCOPY_FLAGS) $(DEBUG_DIR)/ShimLayer.elf
-  
+
+$(OUTPUT_DIR)/FdtTable.o : $(SOURCE_DIR)/FdtTable.c
+	"$(CC)" $(DEPS_FLAGS) $(CC_FLAGS) -c -o $(OUTPUT_DIR)/FdtTable.o $(INC) $(SOURCE_DIR)/FdtTable.c
+
 $(OUTPUT_DIR)/ShimLayer.o : $(SOURCE_DIR)/ShimLayer.c
 	"$(CC)" $(DEPS_FLAGS) $(CC_FLAGS) -c -o $(OUTPUT_DIR)/ShimLayer.o -DMEMBASE=$(MEMBASE) -DMEMSIZE=$(MEMSIZE)  -DUEFI_REGION_SIZE=$(UEFI_REGION_SIZE)  $(INC) $(SOURCE_DIR)/ShimLayer.c
 
@@ -168,6 +171,6 @@ cleanall:
 	$(RD) $(OUTPUT_DIR)
 	$(RD) $(BUILD_DIR)/Library/BaseLib/OUTPUT
 	$(RD) $(BUILD_DIR)/Library/HobLib/OUTPUT
+	$(RD) $(BUILD_DIR)/Library/FdtLib/OUTPUT
 	$(RD) $(BUILD_DIR)/Library/ParseLib/OUTPUT
-	$(RD) $(BUILD_DIR)/Library/ElfLoaderLib/OUTPUT
 	$(RD) $(BUILD_DIR)/Library/LzmaCustomDecompressLib/OUTPUT
